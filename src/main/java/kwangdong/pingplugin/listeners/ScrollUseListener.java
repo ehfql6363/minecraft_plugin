@@ -36,7 +36,7 @@ public class ScrollUseListener implements Listener {
 		}
 
 		// 강화 수행
-		boolean upgraded = EnchantUtil.upgradeEnchantment(offhand);
+		boolean upgraded = EnchantUtil.upgradeEnchantmentRandom(offhand);
 		if (!upgraded) {
 			player.sendMessage("§c강화 가능한 인첸트가 없습니다.");
 			return;
