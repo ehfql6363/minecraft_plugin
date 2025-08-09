@@ -4,6 +4,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -122,7 +124,7 @@ public class WaveManager {
         announceRound();
 
         // 한 마리 스폰 (WaveSpawner가 안전 오프셋/태깅/엘리트 강화/드랍확률 0 처리)
-        WaveSpawner.spawnMonster(waveCenter, currentRound);
+        WaveSpawner.spawnMonster(waveCenter, currentRound, participants);
 
         // 혹시 남아있을 스케줄러 방지
         if (waveTask != null) {
@@ -175,6 +177,9 @@ public class WaveManager {
             waveTask = null;
         }
 
+        // ✅ 성공 효과 먼저
+        if (success) celebrateSuccess();
+
         // 상태 복원 및 보상/메시지
         for (Player p : participants) {
             WavePlayerState.restoreState(p); // 복원 먼저
@@ -206,5 +211,15 @@ public class WaveManager {
      */
     public void stopWave() {
         finishWave(false);
+    }
+
+    private void celebrateSuccess() {
+        for (Player p : participants) {
+            p.sendMessage(Component.text("몬스터 웨이브 성공!", NamedTextColor.GOLD));
+            p.sendMessage(Component.text("보상이 지급되었습니다."));
+            p.playSound(p, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
+            p.playSound(p, Sound.EVENT_RAID_HORN, 0.7f, 1.0f);
+            p.spawnParticle(Particle.HEART, p.getLocation().add(0, 1, 0), 30, 0.4, 0.6, 0.4, 0.01);
+        }
     }
 }
