@@ -37,6 +37,8 @@ public class WaveManager {
 
 	// 사이드바 UI 매니저(데스카운트 오버레이)
 	private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
+	private final RespawnPointManager respawnPoints = new RespawnPointManager();
+
 
 	// 라운드당 몬스터 수 (필요 시 난이도에 맞춰 조절)
 	private int getMobsPerRound(int round) {
@@ -92,6 +94,9 @@ public class WaveManager {
 
 		for (Player p : participants) {
 			deathCounts.put(p.getUniqueId(), 10);
+
+			// 각 플레이어의 "현재 위치"를 웨이브 리스폰으로 지정
+			respawnPoints.setWaveRespawn(p, waveCenter);
 		}
 
 		// 사이드바 표시 (초기값 세팅)
@@ -212,8 +217,11 @@ public class WaveManager {
 			ghostManager.restore(p);
 		}
 
-		// 사이드바 해제 등 UI 정리 (넣어놨다면)
+		// 사이드바 해제 등 UI 정리
 		deathSidebar.stop();
+
+		// 원래 리스폰으로 복원
+		respawnPoints.restoreAll(participants);
 
 		// 상태 복원 & 보상/메시지
 		for (Player p : participants) {
