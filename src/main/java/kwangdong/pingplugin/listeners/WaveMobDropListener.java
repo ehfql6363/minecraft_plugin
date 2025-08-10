@@ -1,19 +1,30 @@
 package kwangdong.pingplugin.listeners;
 
+import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.util.WaveTags;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.persistence.PersistentDataType;
 
-import kwangdong.pingplugin.util.WaveTags;
-
 public class WaveMobDropListener implements Listener {
 
-	@EventHandler
-	public void onWaveMobDeath(EntityDeathEvent e) {
-		if (e.getEntity().getPersistentDataContainer().has(WaveTags.WAVE_MOB, PersistentDataType.BYTE)) {
-			e.getDrops().clear();     // ✅ 아이템 드랍 제거
-			e.setDroppedExp(0);       // ✅ 경험치 드랍 제거
-		}
-	}
+    private final WaveManager waveManager;
+
+    public WaveMobDropListener(WaveManager waveManager) {
+        this.waveManager = waveManager;
+    }
+
+    @EventHandler
+    public void onWaveMobDeath(EntityDeathEvent e) {
+        var pdc = e.getEntity().getPersistentDataContainer();
+        if (!pdc.has(WaveTags.WAVE_MOB, PersistentDataType.BYTE)) return;
+
+        // 드랍/경험치 제거
+        e.getDrops().clear();
+        e.setDroppedExp(0);
+
+        // ⭕ 진행 중 라운드 몬스터라면 다음 라운드로
+        waveManager.onWaveMobKilled(e.getEntity().getUniqueId());
+    }
 }
