@@ -26,12 +26,17 @@ public class WaveManager {
     private List<Player> participants = new ArrayList<>();
     private final Map<UUID, Integer> deathCounts = new HashMap<>();
     private final Set<UUID> ghosts = new HashSet<>();
-    private Location waveCenter;
-    private UUID currentMobId = null;
+    private final Set<UUID> aliveMobIds = new HashSet<>(); // ✅ 현재 라운드 살아있는 웨이브 몹
 
-    public WaveManager(Plugin plugin) {
-        this.plugin = plugin;
+    private Location waveCenter;
+
+    // 라운드당 몬스터 수 (테스트는 1, 나중엔 라운드/난이도에 따라 늘리면 됨)
+    private int getMobsPerRound(int round) {
+        // 예) round 1~10: 1,2,2,3,3,4,4,5,5,6 처럼 점진 증가하고 싶다면 로직 바꾸면 됨
+        return 1; // 지금은 테스트니까 1
     }
+
+    public WaveManager(Plugin plugin) { this.plugin = plugin; }
 
     public boolean isWaveActive() { return isWaveActive; }
     public int getCurrentRound() { return currentRound; }
@@ -39,7 +44,7 @@ public class WaveManager {
     public void tryStartWaveNight(Collection<? extends Player> onlinePlayers) {
         if (isWaveActive) return;
         if (onlinePlayers == null || onlinePlayers.isEmpty()) return;
-        if (random.nextInt(100) != 0) return; // 1%
+        if (random.nextInt(100) != 0) return;
 
         List<Player> online = new ArrayList<>(onlinePlayers);
         Player center = online.get(random.nextInt(online.size()));
@@ -71,6 +76,8 @@ public class WaveManager {
 
         deathCounts.clear();
         ghosts.clear();
+        aliveMobIds.clear();
+
         for (Player p : participants) {
             deathCounts.put(p.getUniqueId(), 10);
             WavePlayerState.saveState(p);
@@ -85,8 +92,8 @@ public class WaveManager {
     private void announceRound() {
         Component title = Component.text("Round " + currentRound + " / 10", NamedTextColor.GOLD);
         Component sub   = Component.text("엘리트 확률 10%", NamedTextColor.GRAY);
-        Title t = Title.title(title, sub, Times.times(
-                Duration.ofMillis(200), Duration.ofMillis(1200), Duration.ofMillis(200)));
+        Title t = Title.title(title, sub,
+                Times.times(Duration.ofMillis(200), Duration.ofMillis(1200), Duration.ofMillis(200)));
         for (Player p : participants) {
             p.showTitle(t);
             p.sendActionBar(Component.text("라운드 시작!", NamedTextColor.YELLOW));
@@ -100,8 +107,15 @@ public class WaveManager {
 
         currentRound++;
         announceRound();
-        LivingEntity mob = WaveSpawner.spawnMonster(waveCenter, currentRound, participants);
-        currentMobId = mob.getUniqueId();
+
+        aliveMobIds.clear(); // ✅ 라운드 시작 시 초기화
+
+        int count = getMobsPerRound(currentRound);
+        List<LivingEntity> mobs = WaveSpawner.spawnMonsters(waveCenter, currentRound, participants, count);
+        for (LivingEntity m : mobs) {
+            aliveMobIds.add(m.getUniqueId());
+        }
+        // ⛔ 자동 진행 타이머 없음 — 전부 처치되어 aliveMobIds가 비어야 다음 라운드로 이동
     }
 
     public void onPlayerDeath(Player player) {
@@ -126,15 +140,27 @@ public class WaveManager {
         }
     }
 
+    /** 웨이브 몹이 죽을 때마다 호출됨 */
     public void onWaveMobKilled(UUID mobId) {
         if (!isWaveActive) return;
-        if (currentMobId == null || !currentMobId.equals(mobId)) return;
+        if (!aliveMobIds.remove(mobId)) return; // 현재 라운드 몹이 아니면 무시
 
+        // 아직 라운드 몹이 남아있으면 대기
+        if (!aliveMobIds.isEmpty()) {
+            // 남은 수 안내(선택)
+            int left = aliveMobIds.size();
+            for (Player p : participants) {
+                p.sendActionBar(Component.text("남은 적: " + left, NamedTextColor.YELLOW));
+            }
+            return;
+        }
+
+        // 이 라운드 몬스터 전부 처치 → 다음 라운드
         if (currentRound >= 10) {
             finishWave(true);
             return;
         }
-        // 다음 라운드로 부드럽게
+        // 연출 텀
         Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 2);
     }
 
@@ -171,9 +197,9 @@ public class WaveManager {
         participants.clear();
         deathCounts.clear();
         ghosts.clear();
+        aliveMobIds.clear();
         waveCenter = null;
         currentRound = 0;
-        currentMobId = null;
     }
 
     public void skipWave() { finishWave(true); }
