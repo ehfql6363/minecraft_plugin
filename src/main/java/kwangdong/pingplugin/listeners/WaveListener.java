@@ -16,15 +16,6 @@ public class WaveListener implements Listener {
 		this.waveManager = waveManager;
 	}
 
-	@EventHandler
-	public void onPlayerDeath(PlayerDeathEvent e) {
-		waveManager.onPlayerDeath(e.getEntity());
-		// 죽어도 아이템 드랍/경험치 손실 방지
-		e.setKeepInventory(true);
-		e.setKeepLevel(true);
-		e.setDroppedExp(0);
-		e.getDrops().clear();
-	}
 
 	/** 침대 수면으로 밤이 스킵될 때 (NIGHT_SKIP) 발생.
 	 *  서버 세팅에 따라 밤 진입 탐지 방식을 월드 시간틱 검사로 바꿔도 됨 */
