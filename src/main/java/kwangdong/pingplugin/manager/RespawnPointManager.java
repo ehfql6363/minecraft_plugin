@@ -1,42 +1,54 @@
 package kwangdong.pingplugin.manager;
 
 import org.bukkit.Location;
+import org.bukkit.World.Environment;
 import org.bukkit.entity.Player;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
-/**
- * 웨이브 동안 임시 리스폰 지점 지정 + 종료 시 복원.
- * - 기존 리스폰이 없던 경우(null)도 그대로 기억했다가 종료 시 null로 복원.
- */
 public class RespawnPointManager {
 
 	private final Map<UUID, Location> original = new HashMap<>();
+	private final Map<UUID, Location> waveRespawns = new HashMap<>();
 
-	/** 플레이어의 "기존 리스폰"을 저장하고, 새 리스폰을 지정 */
-	public void setWaveRespawn(Player p, Location newRespawn) {
+	/** 웨이브 시작 시: 기존 리스폰 저장 + 웨이브 리스폰 강제 지정 */
+	public void setWaveRespawn(Player p, Location waveLoc) {
 		UUID id = p.getUniqueId();
-		// 기존 리스폰을 한 번만 저장 (여러 번 호출되어도 최초 값 유지)
-		original.putIfAbsent(id, p.getRespawnLocation()); // Paper API
+		original.putIfAbsent(id, p.getRespawnLocation()); // Paper 1.20+ (없으면 null)
+		waveRespawns.put(id, waveLoc.clone());
 
-		// 웨이브용 리스폰 위치 지정
-		p.setRespawnLocation(newRespawn);
+		// Overworld면 침대 스폰으로 강제 등록(메시지 방지), 그 외 월드는 이벤트에서 덮어씀
+		if (waveLoc.getWorld().getEnvironment() == Environment.NORMAL) {
+			// 베드 없어도 강제로 스폰 지점으로 사용
+			p.setBedSpawnLocation(waveLoc, true);
+		}
+		// Paper면 아래도 같이 해두면 좋음(다음 리스폰 기본값)
+		try {
+			p.setRespawnLocation(waveLoc);
+		} catch (NoSuchMethodError ignored) {}
 	}
 
-	/** 한 명 복원 */
+	/** 웨이브 종료 시: 원래 리스폰으로 복원 */
 	public void restore(Player p) {
 		UUID id = p.getUniqueId();
-		Location prev = original.remove(id); // 없으면 null
-		// 원래 리스폰으로 복원 (null이면 리스폰 지정 해제)
-		p.setRespawnLocation(prev);
+		Location prev = original.remove(id);
+		waveRespawns.remove(id);
+
+		// 기존 값 복원 (null이면 해제)
+		if (prev != null) {
+			p.setBedSpawnLocation(prev, true);
+			try { p.setRespawnLocation(prev); } catch (NoSuchMethodError ignored) {}
+		} else {
+			p.setBedSpawnLocation(null, true);
+			try { p.setRespawnLocation(null); } catch (NoSuchMethodError ignored) {}
+		}
 	}
 
-	/** 여러 명 복원 */
 	public void restoreAll(Collection<? extends Player> players) {
 		for (Player p : players) restore(p);
-		original.clear();
+	}
+
+	public Location getWaveRespawn(UUID id) {
+		return waveRespawns.get(id);
 	}
 }

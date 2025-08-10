@@ -39,7 +39,6 @@ public class WaveManager {
 	private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
 	private final RespawnPointManager respawnPoints = new RespawnPointManager();
 
-
 	// 라운드당 몬스터 수 (필요 시 난이도에 맞춰 조절)
 	private int getMobsPerRound(int round) {
 		// 예시: round가 오를수록 증가시키고 싶다면 로직 변경
@@ -54,6 +53,10 @@ public class WaveManager {
 	public int getCurrentRound() { return currentRound; }
 	public Plugin getPlugin() { return plugin; }
 	public boolean isGhost(Player p) { return ghosts.contains(p.getUniqueId()); }
+	public Location getRespawnPoint(Player p) {
+		return respawnPoints.getWaveRespawn(p.getUniqueId());
+	}
+
 
 	public void tryStartWaveNight(Collection<? extends Player> onlinePlayers) {
 		if (isWaveActive) return;

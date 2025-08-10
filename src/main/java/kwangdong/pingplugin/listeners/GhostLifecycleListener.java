@@ -1,7 +1,9 @@
 package kwangdong.pingplugin.listeners;
 
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -26,15 +28,22 @@ public class GhostLifecycleListener implements Listener {
 		this.ghostManager = ghostManager;
 	}
 
-	@EventHandler
+	@EventHandler(priority = EventPriority.HIGHEST)
 	public void onRespawn(PlayerRespawnEvent e) {
 		Player p = e.getPlayer();
-		if (!waveManager.isWaveActive()) return;
-		if (!waveManager.isGhost(p)) return;
+		if (!waveManager.isWaveActive() || !waveManager.isParticipant(p)) return;
 
-		// 리스폰 직후 1틱 뒤 관전 모드 적용 (장비 복원/이동 등 먼저 끝나게)
-		p.getServer().getScheduler().runTask(waveManager.getPlugin(), () -> ghostManager.setGhost(p));
+		Location waveLoc = waveManager.getRespawnPoint(p); // ↓ WaveManager에 게터 추가
+		if (waveLoc != null) {
+			// 안전 보정: 막혔으면 위로 올리기
+			Location safe = waveLoc.clone();
+			var world = safe.getWorld();
+			int y = Math.max(world.getHighestBlockYAt(safe), safe.getBlockY()) + 1;
+			safe.setY(y);
+			e.setRespawnLocation(safe);
+		}
 	}
+
 
 	@EventHandler
 	public void onJoin(PlayerJoinEvent e) {
