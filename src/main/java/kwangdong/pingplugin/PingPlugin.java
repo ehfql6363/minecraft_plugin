@@ -11,8 +11,9 @@ import org.bukkit.scheduler.BukkitTask;
 import kwangdong.pingplugin.commands.DeathCommand;
 import kwangdong.pingplugin.commands.PingCommand;
 import kwangdong.pingplugin.commands.WaveCommand;
-import kwangdong.pingplugin.tasks.RewardManager;
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.GhostManager;
+import kwangdong.pingplugin.manager.RewardManager;
+import kwangdong.pingplugin.manager.WaveManager;
 import kwangdong.pingplugin.util.WaveTags;
 
 public class PingPlugin extends JavaPlugin {
@@ -20,6 +21,7 @@ public class PingPlugin extends JavaPlugin {
 	private static PingPlugin instance;
 	private BukkitTask autoWaveTask;
 	private WaveManager waveManager;
+	private GhostManager ghostManager;
 	// 사망 좌표 저장소 (플레이어 UUID → 좌표 문자열)
 	public static Map<UUID, LocationInfo> deathMap = new HashMap<>();
 
@@ -31,6 +33,7 @@ public class PingPlugin extends JavaPlugin {
         WaveTags.init(this);        // ✅ 웨이브 몹 태그 키 초기화
 
         this.waveManager = new WaveManager(this);
+	    this.ghostManager = new GhostManager();
 
         // 명령어
         getCommand("ping").setExecutor(new PingCommand());
@@ -43,6 +46,9 @@ public class PingPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ScrollUseListener(), this);
         getServer().getPluginManager().registerEvents(new WaveSleepListener(waveManager), this);
         getServer().getPluginManager().registerEvents(new WaveMobDropListener(waveManager), this);
+	    getServer().getPluginManager().registerEvents(
+		    new GhostLifecycleListener(waveManager, ghostManager), this
+	    );
 
         // ✅ 자연 야간 감지 타이머 (1초마다, 낮→밤 전이 시 1% 시도)
         autoWaveTask = getServer().getScheduler()
