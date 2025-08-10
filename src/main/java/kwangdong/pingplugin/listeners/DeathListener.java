@@ -8,7 +8,7 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.Plugin;
 
 import kwangdong.pingplugin.tasks.DeathBeamTask;
-import kwangdong.pingplugin.tasks.DeathBeamTaskManager;
+import kwangdong.pingplugin.manager.DeathBeamTaskManager;
 import kwangdong.pingplugin.PingPlugin;
 import kwangdong.pingplugin.util.ColorUtil;
 

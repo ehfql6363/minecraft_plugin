@@ -6,7 +6,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.world.TimeSkipEvent;
 
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.WaveManager;
 
 public class WaveListener implements Listener {
 

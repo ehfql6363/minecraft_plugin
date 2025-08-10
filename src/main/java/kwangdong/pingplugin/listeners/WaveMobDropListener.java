@@ -1,6 +1,6 @@
 package kwangdong.pingplugin.listeners;
 
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.WaveManager;
 import kwangdong.pingplugin.util.WaveTags;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

@@ -1,4 +1,4 @@
-package kwangdong.pingplugin.tasks;
+package kwangdong.pingplugin.manager;
 
 import java.util.Collection;
 

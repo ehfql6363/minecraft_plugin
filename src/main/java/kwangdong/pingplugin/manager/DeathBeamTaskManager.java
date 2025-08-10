@@ -1,7 +1,9 @@
-package kwangdong.pingplugin.tasks;
+package kwangdong.pingplugin.manager;
 
 import java.util.HashMap;
 import java.util.UUID;
+
+import kwangdong.pingplugin.tasks.DeathBeamTask;
 
 public class DeathBeamTaskManager {
 	private static final HashMap<UUID, DeathBeamTask> tasks = new HashMap<>();

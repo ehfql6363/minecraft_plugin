@@ -7,7 +7,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import kwangdong.pingplugin.tasks.DeathBeamTaskManager;
+import kwangdong.pingplugin.manager.DeathBeamTaskManager;
 import kwangdong.pingplugin.PingPlugin;
 
 public class DeathCommand implements CommandExecutor {

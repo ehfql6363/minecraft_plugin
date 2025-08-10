@@ -1,4 +1,4 @@
-package kwangdong.pingplugin.tasks;
+package kwangdong.pingplugin.manager;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;

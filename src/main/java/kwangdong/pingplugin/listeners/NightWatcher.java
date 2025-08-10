@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.WaveManager;
 
 public class NightWatcher implements Runnable {
 

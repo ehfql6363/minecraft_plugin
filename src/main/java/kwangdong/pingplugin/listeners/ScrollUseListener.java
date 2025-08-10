@@ -1,6 +1,6 @@
 package kwangdong.pingplugin.listeners;
 
-import kwangdong.pingplugin.tasks.RewardManager;
+import kwangdong.pingplugin.manager.RewardManager;
 import kwangdong.pingplugin.util.EnchantUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;

@@ -5,7 +5,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.WaveManager;
 
 public class WaveCommand implements CommandExecutor {
 

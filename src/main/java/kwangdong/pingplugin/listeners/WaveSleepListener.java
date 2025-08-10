@@ -7,7 +7,7 @@ import org.bukkit.event.player.PlayerBedEnterEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
-import kwangdong.pingplugin.tasks.WaveManager;
+import kwangdong.pingplugin.manager.WaveManager;
 
 public class WaveSleepListener implements Listener {
 
