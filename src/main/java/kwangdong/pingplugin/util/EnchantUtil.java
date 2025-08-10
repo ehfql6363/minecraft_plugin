@@ -7,7 +7,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
 
 public final class EnchantUtil {
 
@@ -15,9 +14,10 @@ public final class EnchantUtil {
 
     private static final Set<Enchantment> ALLOWED_ENCHANTS = Set.of(
             Enchantment.SHARPNESS, Enchantment.SMITE, Enchantment.BANE_OF_ARTHROPODS,
-            Enchantment.FEATHER_FALLING, Enchantment.FIRE_ASPECT, Enchantment.PROTECTION,
+            Enchantment.FEATHER_FALLING, Enchantment.PROTECTION,
             Enchantment.PROJECTILE_PROTECTION, Enchantment.BLAST_PROTECTION, Enchantment.FIRE_PROTECTION,
-            Enchantment.UNBREAKING, Enchantment.POWER, Enchantment.LOOTING, Enchantment.FORTUNE, Enchantment.THORNS
+            Enchantment.UNBREAKING, Enchantment.POWER, Enchantment.LOOTING, Enchantment.FORTUNE, Enchantment.THORNS,
+	        Enchantment.LUCK_OF_THE_SEA, Enchantment.IMPALING
     );
 
     public static class UpgradeResult {
@@ -40,7 +40,7 @@ public final class EnchantUtil {
 
         List<Enchantment> candidates = current.keySet().stream()
                 .filter(ALLOWED_ENCHANTS::contains)
-                .collect(Collectors.toList());
+                .toList();
         if (candidates.isEmpty()) return Optional.empty();
 
         Enchantment target = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
@@ -60,7 +60,6 @@ public final class EnchantUtil {
             case "smite" -> "강타";
             case "bane_of_arthropods" -> "살충";
             case "feather_falling" -> "가벼운 착지";
-            case "fire_aspect" -> "발화";
             case "protection" -> "보호";
             case "projectile_protection" -> "투사체 보호";
             case "blast_protection" -> "폭발 보호";
@@ -70,6 +69,8 @@ public final class EnchantUtil {
             case "looting" -> "약탈";
             case "fortune" -> "행운";
             case "thorns" -> "가시";
+			case "luck_of_the_sea" -> "바다의 행운";
+			case "impaling" -> "찌르기";
             default -> e.getKey().getKey();
         };
     }
