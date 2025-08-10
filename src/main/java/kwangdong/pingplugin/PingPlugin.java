@@ -42,7 +42,7 @@ public class PingPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new WaveListener(waveManager), this);
         getServer().getPluginManager().registerEvents(new ScrollUseListener(), this);
         getServer().getPluginManager().registerEvents(new WaveSleepListener(waveManager), this);
-        getServer().getPluginManager().registerEvents(new WaveMobDropListener(), this);
+        getServer().getPluginManager().registerEvents(new WaveMobDropListener(waveManager), this);
 
         // ✅ 자연 야간 감지 타이머 (1초마다, 낮→밤 전이 시 1% 시도)
         autoWaveTask = getServer().getScheduler()
