@@ -36,7 +36,7 @@ public class WaveManager {
 
 	private Location waveCenter;
 
-	// ✅ 사이드바 UI 매니저(데스카운트 오버레이)
+	// 사이드바 UI 매니저(데스카운트 오버레이)
 	private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
 
 	// 라운드당 몬스터 수 (필요 시 난이도에 맞춰 조절)
@@ -96,7 +96,7 @@ public class WaveManager {
 			WavePlayerState.saveState(p);
 		}
 
-		// ✅ 사이드바 표시 (초기값 세팅)
+		// 사이드바 표시 (초기값 세팅)
 		deathSidebar.start(participants, deathCounts);
 
 		Component startMsg = Component.text("[Wave] 몬스터 웨이브가 시작됩니다!", NamedTextColor.GOLD);
@@ -119,7 +119,10 @@ public class WaveManager {
 
 	private void startNextRound() {
 		if (!isWaveActive) return;
-		if (currentRound >= 10) { finishWave(true); return; }
+		if (currentRound >= 10) {
+			finishWave(true);
+			return;
+		}
 
 		currentRound++;
 		announceRound();
@@ -152,7 +155,7 @@ public class WaveManager {
 			// 인벤/경험치 복원
 			WavePlayerState.restoreOnDeath(player);
 
-			// ⬇️ 리스폰 직후 관전 모드 적용 (리스너에서도 안전망이 있으나 즉시 처리 보조)
+			// 리스폰 직후 관전 모드 적용 (리스너에서도 안전망이 있으나 즉시 처리 보조)
 			plugin.getServer().getScheduler().runTask(plugin, () -> ghostManager.setGhost(player));
 
 		} else {
@@ -165,7 +168,7 @@ public class WaveManager {
 
 		// 전원 유령이면 실패
 		if (ghosts.size() == participants.size()) {
-			finishWave(false);
+			Bukkit.getScheduler().runTask(plugin, () -> finishWave(false));
 		}
 	}
 
@@ -184,11 +187,13 @@ public class WaveManager {
 		}
 
 		// 이 라운드 몬스터 전부 처치 → 다음 라운드
-		if (currentRound >= 10) { // 일반적으로 여기 오면 == 10
-			finishWave(true);
-			return;
+		if (currentRound >= 10) {
+			// 몹 전멸로 웨이브 클리어 → 다음 틱에 마무리
+			Bukkit.getScheduler().runTask(plugin, () -> finishWave(true));
+		} else {
+			// 다음 라운드 시작도 다음 틱에
+			Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 2);
 		}
-		Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 2);
 	}
 
 	private void celebrateSuccess() {
@@ -212,7 +217,7 @@ public class WaveManager {
 
 		if (success) celebrateSuccess();
 
-		// ⬇️ 유령 복원: 먼저 게임모드부터 돌려놓자 (관전→원래 모드)
+		// 유령 복원: 먼저 게임모드부터 돌려놓자 (관전→원래 모드)
 		for (Player p : participants) {
 			ghostManager.restore(p);
 		}
@@ -244,8 +249,13 @@ public class WaveManager {
 	public void skipWave() { finishWave(true); }
 	public void stopWave() { finishWave(false); }
 
-	/** (선택) 외부 리스너에서 재접속 시 사이드바 복원하려면 사용 */
+
 	public Integer getDeathLeft(Player p) {
 		return deathCounts.get(p.getUniqueId());
+	}
+
+	public boolean isParticipant(Player player) {
+		if (player == null) return false;
+		return participants.stream().anyMatch(p -> p.getUniqueId().equals(player.getUniqueId()));
 	}
 }
