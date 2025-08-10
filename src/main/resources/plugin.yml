@@ -1,5 +1,5 @@
 name: PingPlugin
-version: 1.3.16
+version: 1.3.17
 main: kwangdong.pingplugin.PingPlugin
 api-version: 1.21.8
 commands:
