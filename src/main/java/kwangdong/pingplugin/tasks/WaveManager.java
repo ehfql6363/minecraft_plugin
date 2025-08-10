@@ -2,14 +2,17 @@ package kwangdong.pingplugin.tasks;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.title.Title;
+import net.kyori.adventure.title.Title.Times;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,23 +27,15 @@ public class WaveManager {
     private final Map<UUID, Integer> deathCounts = new HashMap<>();
     private final Set<UUID> ghosts = new HashSet<>();
     private Location waveCenter;
-    private BukkitTask waveTask;
+    private UUID currentMobId = null;
 
     public WaveManager(Plugin plugin) {
         this.plugin = plugin;
     }
 
-    public boolean isWaveActive() {
-        return isWaveActive;
-    }
+    public boolean isWaveActive() { return isWaveActive; }
+    public int getCurrentRound() { return currentRound; }
 
-    public int getCurrentRound() {
-        return currentRound;
-    }
-
-    /**
-     * 밤 시작(자연 진입) 시 1% 확률로 자동 시작 시도
-     */
     public void tryStartWaveNight(Collection<? extends Player> onlinePlayers) {
         if (isWaveActive) return;
         if (onlinePlayers == null || onlinePlayers.isEmpty()) return;
@@ -51,23 +46,17 @@ public class WaveManager {
         startWave(center);
     }
 
-    /**
-     * 테스트/명령어로 수동 시작
-     */
     public void startWave(Player center) {
         if (center == null) return;
-
         if (isWaveActive) {
             center.sendMessage(Component.text("이미 웨이브가 진행 중입니다.", NamedTextColor.YELLOW));
             return;
         }
 
-        // 상태 초기화
         isWaveActive = true;
         currentRound = 0;
-        waveCenter = center.getLocation().clone(); // 안전하게 복제
+        waveCenter = center.getLocation().clone();
 
-        // 50블럭 내 확정 참여자
         participants = Bukkit.getOnlinePlayers().stream()
                 .filter(p -> p.getWorld().equals(center.getWorld())
                         && p.getLocation().distance(center.getLocation()) <= 50)
@@ -76,72 +65,47 @@ public class WaveManager {
         if (participants.isEmpty()) {
             isWaveActive = false;
             waveCenter = null;
-            center.sendMessage(Component.text("반경 50블럭 내 참여자가 없습니다.", NamedTextColor.RED));
+            center.sendMessage(Component.text("반경 50블록 내 참여자가 없습니다.", NamedTextColor.RED));
             return;
         }
 
-        // 데스카운트/세이브
         deathCounts.clear();
         ghosts.clear();
         for (Player p : participants) {
             deathCounts.put(p.getUniqueId(), 10);
-            WavePlayerState.saveState(p); // 인벤/경험치 백업
+            WavePlayerState.saveState(p);
         }
 
-        participants.forEach(p ->
-                p.sendMessage(Component.text("[Wave] 몬스터 웨이브가 시작됩니다!", NamedTextColor.GOLD)));
+        Component startMsg = Component.text("[Wave] 몬스터 웨이브가 시작됩니다!", NamedTextColor.GOLD);
+        participants.forEach(p -> p.sendMessage(startMsg));
 
         startNextRound();
     }
 
-    /**
-     * 라운드 안내(타이틀 + 액션바)
-     */
     private void announceRound() {
-        String title = "§6Round " + currentRound + " / 10";
-        String sub = "§7엘리트 확률 10%";
+        Component title = Component.text("Round " + currentRound + " / 10", NamedTextColor.GOLD);
+        Component sub   = Component.text("엘리트 확률 10%", NamedTextColor.GRAY);
+        Title t = Title.title(title, sub, Times.times(
+                Duration.ofMillis(200), Duration.ofMillis(1200), Duration.ofMillis(200)));
         for (Player p : participants) {
-            // 구버전 호환을 위해 문자열 타이틀 사용
-            p.sendTitle(title, sub, 10, 40, 10);
+            p.showTitle(t);
             p.sendActionBar(Component.text("라운드 시작!", NamedTextColor.YELLOW));
+            p.playSound(p, Sound.BLOCK_NOTE_BLOCK_BELL, 0.7f, 1.2f);
         }
     }
 
-    /**
-     * 다음 라운드 시작(1마리 소환 후 N초 대기)
-     */
     private void startNextRound() {
         if (!isWaveActive) return;
-
-        if (currentRound >= 10) {
-            finishWave(true);
-            return;
-        }
+        if (currentRound >= 10) { finishWave(true); return; }
 
         currentRound++;
-
-        // 라운드 안내
         announceRound();
-
-        // 한 마리 스폰 (WaveSpawner가 안전 오프셋/태깅/엘리트 강화/드랍확률 0 처리)
-        WaveSpawner.spawnMonster(waveCenter, currentRound, participants);
-
-        // 혹시 남아있을 스케줄러 방지
-        if (waveTask != null) {
-            waveTask.cancel();
-            waveTask = null;
-        }
-
-        // 다음 라운드 예약 (10초 후)
-        waveTask = Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 10);
+        LivingEntity mob = WaveSpawner.spawnMonster(waveCenter, currentRound, participants);
+        currentMobId = mob.getUniqueId();
     }
 
-    /**
-     * 웨이브 중 플레이어 사망 처리(리스너에서 호출)
-     */
     public void onPlayerDeath(Player player) {
         if (!isWaveActive || player == null) return;
-
         UUID id = player.getUniqueId();
         if (!deathCounts.containsKey(id)) return;
 
@@ -155,71 +119,63 @@ public class WaveManager {
             player.sendMessage(Component.text("남은 데스카운트: " + left, NamedTextColor.GRAY));
         }
 
-        // 죽어도 아이템/경험치 유지
         WavePlayerState.restoreOnDeath(player);
 
-        // 전원 유령이면 실패
         if (ghosts.size() == participants.size()) {
             finishWave(false);
         }
     }
 
-    /**
-     * 웨이브 종료(성공/실패 공통 마무리)
-     */
+    public void onWaveMobKilled(UUID mobId) {
+        if (!isWaveActive) return;
+        if (currentMobId == null || !currentMobId.equals(mobId)) return;
+
+        if (currentRound >= 10) {
+            finishWave(true);
+            return;
+        }
+        // 다음 라운드로 부드럽게
+        Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 2);
+    }
+
+    private void celebrateSuccess() {
+        Title title = Title.title(
+                Component.text("웨이브 성공!", NamedTextColor.GREEN),
+                Component.text("보상이 지급되었습니다.", NamedTextColor.WHITE),
+                Times.times(Duration.ofMillis(200), Duration.ofMillis(1400), Duration.ofMillis(300))
+        );
+        for (Player p : participants) {
+            p.showTitle(title);
+            p.playSound(p, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
+            p.playSound(p, Sound.EVENT_RAID_HORN, 0.7f, 1.0f);
+            p.spawnParticle(Particle.TOTEM_OF_UNDYING, p.getLocation().add(0, 1, 0), 30, 0.4, 0.6, 0.4, 0.01);
+        }
+    }
+
     public void finishWave(boolean success) {
         if (!isWaveActive) return;
         isWaveActive = false;
 
-        // 라운드 예약 취소(자동 재시작 방지)
-        if (waveTask != null) {
-            waveTask.cancel();
-            waveTask = null;
-        }
-
-        // ✅ 성공 효과 먼저
         if (success) celebrateSuccess();
 
-        // 상태 복원 및 보상/메시지
         for (Player p : participants) {
-            WavePlayerState.restoreState(p); // 복원 먼저
-
+            WavePlayerState.restoreState(p);
             if (success) {
-                RewardManager.giveReward(p); // 전원 지급(원하면 조건 다시 걸 수 있음)
+                RewardManager.giveReward(p);
             } else {
                 p.sendMessage(Component.text("몬스터 웨이브에 실패했습니다.", NamedTextColor.DARK_RED));
+                p.playSound(p, Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
             }
         }
 
-        // 상태 초기화
         participants.clear();
         deathCounts.clear();
         ghosts.clear();
         waveCenter = null;
         currentRound = 0;
+        currentMobId = null;
     }
 
-    /**
-     * 강제 성공
-     */
-    public void skipWave() {
-        finishWave(true);
-    }
-
-    /**
-     * 강제 중지(실패)
-     */
-    public void stopWave() {
-        finishWave(false);
-    }
-
-    private void celebrateSuccess() {
-        for (Player p : participants) {
-            p.sendMessage(Component.text("몬스터 웨이브 성공!", NamedTextColor.GOLD));
-            p.sendMessage(Component.text("보상이 지급되었습니다."));
-            p.playSound(p, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
-            p.playSound(p, Sound.EVENT_RAID_HORN, 0.7f, 1.0f);
-            p.spawnParticle(Particle.HEART, p.getLocation().add(0, 1, 0), 30, 0.4, 0.6, 0.4, 0.01);
-        }
-    }
+    public void skipWave() { finishWave(true); }
+    public void stopWave() { finishWave(false); }
 }
