@@ -28,21 +28,22 @@ public class GhostLifecycleListener implements Listener {
 		this.ghostManager = ghostManager;
 	}
 
-	@EventHandler(priority = EventPriority.HIGHEST)
+	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onRespawn(PlayerRespawnEvent e) {
 		Player p = e.getPlayer();
 		if (!waveManager.isWaveActive() || !waveManager.isParticipant(p)) return;
 
-		Location waveLoc = waveManager.getRespawnPoint(p); // ↓ WaveManager에 게터 추가
-		if (waveLoc != null) {
-			// 안전 보정: 막혔으면 위로 올리기
-			Location safe = waveLoc.clone();
-			var world = safe.getWorld();
-			int y = Math.max(world.getHighestBlockYAt(safe), safe.getBlockY()) + 1;
-			safe.setY(y);
-			e.setRespawnLocation(safe);
-		}
+		Location waveLoc = waveManager.getRespawnPoint(p);
+		if (waveLoc == null) return;
+
+		// 안전한 Y로 보정 (지형 막힘 방지)
+		Location safe = waveLoc.clone();
+		int y = Math.max(safe.getBlockY(), safe.getWorld().getHighestBlockYAt(safe)) + 1;
+		safe.setY(y);
+
+		e.setRespawnLocation(safe);
 	}
+
 
 
 	@EventHandler
