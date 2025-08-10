@@ -1,112 +1,116 @@
 package kwangdong.pingplugin.tasks;
 
+import kwangdong.pingplugin.util.WaveTags;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Random;
-
-import kwangdong.pingplugin.util.WaveTags;
-import org.bukkit.util.Vector;
+import java.util.*;
 
 public class WaveSpawner {
 
-	private static final Random random = new Random();
+    private static final Random random = new Random();
 
-	// 워든, 드래곤, 위더, 슬라임류 제외
-	private static final List<EntityType> ALLOWED = Arrays.asList(
-		EntityType.ZOMBIE, EntityType.SKELETON, EntityType.CREEPER, EntityType.SPIDER,
-		EntityType.PILLAGER, EntityType.DROWNED, EntityType.HUSK, EntityType.ENDERMAN,
-		EntityType.STRAY, EntityType.WITCH, EntityType.VINDICATOR, EntityType.EVOKER
-	);
+    private static final Set<EntityType> BLOCKED = Set.of(
+            EntityType.WARDEN, EntityType.ENDER_DRAGON, EntityType.WITHER,
+            EntityType.SLIME, EntityType.MAGMA_CUBE
+    );
 
-	public static void spawnMonster(Location center, int round, Collection<Player> participants) {
-        Location loc = findSafeSpawnNear(center, participants, 12, 24);
-		EntityType type = ALLOWED.get(random.nextInt(ALLOWED.size()));
-		LivingEntity mob = (LivingEntity) loc.getWorld().spawnEntity(loc, type);
+    private static final List<EntityType> ALLOWED = Arrays.stream(EntityType.values())
+            .filter(EntityType::isSpawnable)
+            .filter(EntityType::isAlive)
+            .filter(t -> t.getEntityClass() != null
+                    && LivingEntity.class.isAssignableFrom(t.getEntityClass()))
+            .filter(t -> !BLOCKED.contains(t))
+            .filter(t -> {
+                Class<?> clazz = t.getEntityClass();
+                return Monster.class.isAssignableFrom(clazz) || t == EntityType.ENDERMAN;
+            })
+            .toList();
 
-		// ✅ 웨이브 몹 태그
-		mob.getPersistentDataContainer().set(WaveTags.WAVE_MOB, PersistentDataType.BYTE, (byte)1);
 
-		// 장비 드랍 확률 0 (방어적 조치)
-		if (mob.getEquipment() != null) {
-			mob.getEquipment().setItemInMainHandDropChance(0f);
-			mob.getEquipment().setItemInOffHandDropChance(0f);
-			mob.getEquipment().setHelmetDropChance(0f);
-			mob.getEquipment().setChestplateDropChance(0f);
-			mob.getEquipment().setLeggingsDropChance(0f);
-			mob.getEquipment().setBootsDropChance(0f);
-		}
-
-		// 10% 엘리트: HP/ATK * 2
-		if (random.nextInt(10) == 0) {
-			maybeDouble(mob, Attribute.MAX_HEALTH);
-			maybeDouble(mob, Attribute.ATTACK_DAMAGE);
-			mob.setHealth(mob.getAttribute(Attribute.MAX_HEALTH).getBaseValue());
-			mob.setCustomName("§c[엘리트] " + type.name());
-			mob.setCustomNameVisible(true);
-		}
-	}
-
-	private static void maybeDouble(LivingEntity mob, Attribute attr) {
-		if (mob.getAttribute(attr) != null) {
-			double base = mob.getAttribute(attr).getBaseValue();
-			mob.getAttribute(attr).setBaseValue(base * 2.0);
-		}
-	}
-
-    // 중심에서 [minR, maxR] 사이로만, 참여자와도 최소 거리 확보
     private static Location findSafeSpawnNear(Location center, Collection<Player> participants,
                                               int minR, int maxR) {
         World w = center.getWorld();
-        Random r = random;
-
-        final double minDist2Center = minR * minR;
-        final double minDist2Player = 10 * 10; // 참여자와 최소 10블록 이상
-
         for (int tries = 0; tries < 40; tries++) {
-            double angle = r.nextDouble() * Math.PI * 2;
-            double radius = minR + r.nextDouble() * (maxR - minR);
+            double angle = random.nextDouble() * Math.PI * 2;
+            double radius = minR + random.nextDouble() * (maxR - minR);
 
-            double tx = center.getX() + Math.cos(angle) * radius;
-            double tz = center.getZ() + Math.sin(angle) * radius;
-            int x = (int) Math.floor(tx);
-            int z = (int) Math.floor(tz);
-
+            int x = (int) Math.floor(center.getX() + Math.cos(angle) * radius);
+            int z = (int) Math.floor(center.getZ() + Math.sin(angle) * radius);
             int y = w.getHighestBlockYAt(x, z) + 1;
+
             Location loc = new Location(w, x + 0.5, y, z + 0.5);
 
-            // 중심과의 거리 보장
-            if (loc.distanceSquared(center) < minDist2Center) continue;
-
-            // 참여자와의 거리 보장
-            boolean tooCloseToPlayer = false;
-            for (Player p : participants) {
-                if (!p.getWorld().equals(w)) continue;
-                if (loc.distanceSquared(p.getLocation()) < minDist2Player) {
-                    tooCloseToPlayer = true; break;
-                }
-            }
-            if (tooCloseToPlayer) continue;
-
-            // 머리 위 2칸 비었는지
             if (!w.getBlockAt(loc).isEmpty()) continue;
             if (!w.getBlockAt(loc.clone().add(0, 1, 0)).isEmpty()) continue;
 
+            boolean tooClose = false;
+            for (Player p : participants) {
+                if (!p.getWorld().equals(w)) continue;
+                if (loc.distanceSquared(p.getLocation()) < 10 * 10) { tooClose = true; break; }
+            }
+            if (tooClose) continue;
+
             return loc;
         }
-        // 그래도 못 찾으면 마지막 수단: 중심에서 15블록 직선 이동 후 y보정
-        Vector dir = new Vector(1, 0, 0).rotateAroundY(r.nextDouble() * Math.PI * 2);
-        Location fallback = center.clone().add(dir.multiply(15));
-        int fy = w.getHighestBlockYAt(fallback.getBlockX(), fallback.getBlockZ()) + 1;
-        fallback.setY(fy);
-        return fallback;
+        // fallback
+        Location fb = center.clone().add(15, 0, 0);
+        int fy = center.getWorld().getHighestBlockYAt(fb.getBlockX(), fb.getBlockZ()) + 1;
+        fb.setY(fy);
+        return fb;
+    }
+
+    public static LivingEntity spawnMonster(Location center, int round, Collection<Player> participants) {
+        Location loc = findSafeSpawnNear(center, participants, 12, 24);
+        EntityType type = ALLOWED.get(random.nextInt(ALLOWED.size()));
+        LivingEntity mob = (LivingEntity) loc.getWorld().spawnEntity(loc, type);
+
+        // 태그
+        mob.getPersistentDataContainer().set(WaveTags.WAVE_MOB, PersistentDataType.BYTE, (byte)1);
+        mob.getPersistentDataContainer().set(WaveTags.WAVE_ROUND, PersistentDataType.INTEGER, round);
+
+        // 드랍 확률 0
+        if (mob.getEquipment() != null) {
+            mob.getEquipment().setItemInMainHandDropChance(0f);
+            mob.getEquipment().setItemInOffHandDropChance(0f);
+            mob.getEquipment().setHelmetDropChance(0f);
+            mob.getEquipment().setChestplateDropChance(0f);
+            mob.getEquipment().setLeggingsDropChance(0f);
+            mob.getEquipment().setBootsDropChance(0f);
+        }
+
+        boolean elite = random.nextInt(10) == 0;
+        if (elite) {
+            if (mob.getAttribute(Attribute.MAX_HEALTH) != null) {
+                var a = mob.getAttribute(Attribute.MAX_HEALTH);
+                Objects.requireNonNull(a).setBaseValue(a.getBaseValue() * 2.0);
+                mob.setHealth(a.getBaseValue());
+            }
+            if (mob.getAttribute(Attribute.ATTACK_DAMAGE) != null) {
+                var a = mob.getAttribute(Attribute.ATTACK_DAMAGE);
+                Objects.requireNonNull(a).setBaseValue(a.getBaseValue() * 2.0);
+            }
+        }
+
+        // 이름(Component) + 글로우
+        Component name = Component.empty()
+                .append(elite ? Component.text("[ELITE] ", NamedTextColor.RED)
+                        : Component.text("[WAVE] ", NamedTextColor.GOLD))
+                .append(Component.text("R" + round + " ", NamedTextColor.WHITE))
+                .append(Component.text(type.name(), NamedTextColor.GRAY));
+        mob.customName(name);
+        mob.setCustomNameVisible(true);
+        mob.setGlowing(true);
+
+        // 스폰 이펙트(옵션)
+        loc.getWorld().spawnParticle(Particle.CLOUD, loc, 12, 0.3, 0.2, 0.3, 0.01);
+
+        return mob;
     }
 }
