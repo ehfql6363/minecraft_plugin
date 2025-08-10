@@ -1,5 +1,7 @@
-package kwangdong.pingplugin.tasks;
+package kwangdong.pingplugin.manager;
 
+import kwangdong.pingplugin.tasks.WavePlayerState;
+import kwangdong.pingplugin.tasks.WaveSpawner;
 import kwangdong.pingplugin.ui.DeathSidebarManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -30,6 +32,8 @@ public class WaveManager {
 	private final Set<UUID> ghosts = new HashSet<>();
 	private final Set<UUID> aliveMobIds = new HashSet<>();
 
+	private final GhostManager ghostManager = new GhostManager();
+
 	private Location waveCenter;
 
 	// ✅ 사이드바 UI 매니저(데스카운트 오버레이)
@@ -47,6 +51,8 @@ public class WaveManager {
 
 	public boolean isWaveActive() { return isWaveActive; }
 	public int getCurrentRound() { return currentRound; }
+	public Plugin getPlugin() { return plugin; }
+	public boolean isGhost(Player p) { return ghosts.contains(p.getUniqueId()); }
 
 	public void tryStartWaveNight(Collection<? extends Player> onlinePlayers) {
 		if (isWaveActive) return;
@@ -130,6 +136,7 @@ public class WaveManager {
 		deathSidebar.updateAll(deathCounts);
 	}
 
+	// onPlayerDeath 내부 변경
 	public void onPlayerDeath(Player player) {
 		if (!isWaveActive || player == null) return;
 		UUID id = player.getUniqueId();
@@ -141,15 +148,20 @@ public class WaveManager {
 		if (left <= 0) {
 			ghosts.add(id);
 			player.sendMessage(Component.text("당신은 유령 상태가 되었습니다. 웨이브 종료까지 관전만 가능합니다.", NamedTextColor.GRAY));
+
+			// 인벤/경험치 복원
+			WavePlayerState.restoreOnDeath(player);
+
+			// ⬇️ 리스폰 직후 관전 모드 적용 (리스너에서도 안전망이 있으나 즉시 처리 보조)
+			plugin.getServer().getScheduler().runTask(plugin, () -> ghostManager.setGhost(player));
+
 		} else {
 			player.sendMessage(Component.text("남은 데스카운트: " + left, NamedTextColor.GRAY));
+			// 인벤/경험치 복원
+			WavePlayerState.restoreOnDeath(player);
 		}
 
-		// ✅ 사이드바 갱신
-		deathSidebar.update(player, left);
-
-		// 죽어도 아이템/경험치 유지
-		WavePlayerState.restoreOnDeath(player);
+		deathSidebar.update(player, Math.max(left, 0));
 
 		// 전원 유령이면 실패
 		if (ghosts.size() == participants.size()) {
@@ -193,15 +205,22 @@ public class WaveManager {
 		}
 	}
 
+	// finishWave 내부 변경 (유령 복원 먼저)
 	public void finishWave(boolean success) {
 		if (!isWaveActive) return;
 		isWaveActive = false;
 
 		if (success) celebrateSuccess();
 
-		// ✅ 사이드바 해제(원래 보드로 복원)
+		// ⬇️ 유령 복원: 먼저 게임모드부터 돌려놓자 (관전→원래 모드)
+		for (Player p : participants) {
+			ghostManager.restore(p);
+		}
+
+		// 사이드바 해제 등 UI 정리 (넣어놨다면)
 		deathSidebar.stop();
 
+		// 상태 복원 & 보상/메시지
 		for (Player p : participants) {
 			WavePlayerState.restoreState(p);
 			if (success) {
@@ -212,6 +231,8 @@ public class WaveManager {
 			}
 		}
 
+		// 캐시 정리
+		ghostManager.clearAll();
 		participants.clear();
 		deathCounts.clear();
 		ghosts.clear();
