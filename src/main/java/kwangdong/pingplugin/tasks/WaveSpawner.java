@@ -66,6 +66,16 @@ public class WaveSpawner {
         return fb;
     }
 
+    public static List<LivingEntity> spawnMonsters(Location center, int round,
+                                                   Collection<Player> participants, int count) {
+        List<LivingEntity> list = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            list.add(spawnMonster(center, round, participants));
+        }
+        return list;
+    }
+
+
     public static LivingEntity spawnMonster(Location center, int round, Collection<Player> participants) {
         Location loc = findSafeSpawnNear(center, participants, 12, 24);
         EntityType type = ALLOWED.get(random.nextInt(ALLOWED.size()));
