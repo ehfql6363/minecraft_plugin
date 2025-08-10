@@ -1,11 +1,12 @@
 name: PingPlugin
-version: 1.3.13
+version: 1.3.14
 main: kwangdong.pingplugin.PingPlugin
 api-version: 1.21.8
 commands:
   ping:
     description: 현재 위치 출력
     usage: /ping cur
+    aliases: [p]
   death:
     description: 마지막 사망 위치 출력
     usage: /death <latest|clear>
