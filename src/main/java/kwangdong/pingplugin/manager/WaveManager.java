@@ -1,6 +1,5 @@
 package kwangdong.pingplugin.manager;
 
-import kwangdong.pingplugin.tasks.WavePlayerState;
 import kwangdong.pingplugin.tasks.WaveSpawner;
 import kwangdong.pingplugin.ui.DeathSidebarManager;
 import net.kyori.adventure.text.Component;
@@ -93,7 +92,6 @@ public class WaveManager {
 
 		for (Player p : participants) {
 			deathCounts.put(p.getUniqueId(), 10);
-			WavePlayerState.saveState(p);
 		}
 
 		// 사이드바 표시 (초기값 세팅)
@@ -152,16 +150,8 @@ public class WaveManager {
 			ghosts.add(id);
 			player.sendMessage(Component.text("당신은 유령 상태가 되었습니다. 웨이브 종료까지 관전만 가능합니다.", NamedTextColor.GRAY));
 
-			// 인벤/경험치 복원
-			WavePlayerState.restoreOnDeath(player);
-
 			// 리스폰 직후 관전 모드 적용 (리스너에서도 안전망이 있으나 즉시 처리 보조)
 			plugin.getServer().getScheduler().runTask(plugin, () -> ghostManager.setGhost(player));
-
-		} else {
-			player.sendMessage(Component.text("남은 데스카운트: " + left, NamedTextColor.GRAY));
-			// 인벤/경험치 복원
-			WavePlayerState.restoreOnDeath(player);
 		}
 
 		deathSidebar.update(player, Math.max(left, 0));
@@ -227,7 +217,6 @@ public class WaveManager {
 
 		// 상태 복원 & 보상/메시지
 		for (Player p : participants) {
-			WavePlayerState.restoreState(p);
 			if (success) {
 				RewardManager.giveReward(p);
 			} else {
