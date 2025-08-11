@@ -21,16 +21,26 @@ public class NightWatcher implements Runnable {
 	@Override
 	public void run() {
 		for (World world : Bukkit.getWorlds()) {
-			// "밤" 정의: 13000 <= time < 23000
 			long t = world.getTime();
 			boolean nowNight = (t >= 13000 && t < 23000);
-			boolean prevNight = wasNight.getOrDefault(world.getUID(), false);
 
-			// 낮 -> 밤으로 "자연스럽게" 넘어가는 순간에만 트리거
-			if (!prevNight && nowNight) {
-				waveManager.tryStartWaveNight(world.getPlayers());
+			UUID id = world.getUID();
+			Boolean prev = wasNight.get(id);
+
+			// 서버 첫 사이클: 상태만 기록하고 넘김(즉시 트리거 방지)
+			if (prev == null) {
+				wasNight.put(id, nowNight);
+				continue;
 			}
-			wasNight.put(world.getUID(), nowNight);
+
+			// 낮 -> 밤으로 넘어가는 순간에만
+			if (!prev && nowNight) {
+				if (!world.getPlayers().isEmpty()) {
+					waveManager.tryStartWaveNight(world.getPlayers()); // 내부에서 10% & 60초 준비
+				}
+			}
+			wasNight.put(id, nowNight);
 		}
 	}
+
 }

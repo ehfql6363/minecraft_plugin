@@ -13,100 +13,191 @@ import org.bukkit.Sound;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * 자연 발동(밤)일 때만 준비 단계(60초 카운트다운)를 거치고,
+ * 명령어 시작은 즉시 라운드 시작.
+ */
 public class WaveManager {
 
 	private final Plugin plugin;
 	private final Random random = new Random();
 
+	// 진행/라운드
 	private boolean isWaveActive = false;
 	private int currentRound = 0;
 
+	// 참가자/상태
 	private List<Player> participants = new ArrayList<>();
 	private final Map<UUID, Integer> deathCounts = new HashMap<>();
 	private final Set<UUID> ghosts = new HashSet<>();
 	private final Set<UUID> aliveMobIds = new HashSet<>();
-
 	private final GhostManager ghostManager = new GhostManager();
+
+	// 준비 단계
+	private boolean isPreparing = false;
+	private BukkitTask prepareTask;
+	private int prepareRemainSec;
+	private Location prepareCenter;
+	private List<Player> prepareParticipants = new ArrayList<>();
 
 	private Location waveCenter;
 
-	// 사이드바 UI 매니저(데스카운트 오버레이)
+	// UI
 	private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
-	private final RespawnPointManager respawnPoints = new RespawnPointManager();
-
-	// 라운드당 몬스터 수 (필요 시 난이도에 맞춰 조절)
-	private int getMobsPerRound(int round) {
-		// 예시: round가 오를수록 증가시키고 싶다면 로직 변경
-		return 1;
-	}
 
 	public WaveManager(Plugin plugin) {
 		this.plugin = plugin;
 	}
 
 	public boolean isWaveActive() { return isWaveActive; }
+	public boolean isPreparing() { return isPreparing; }
 	public int getCurrentRound() { return currentRound; }
 	public Plugin getPlugin() { return plugin; }
 	public boolean isGhost(Player p) { return ghosts.contains(p.getUniqueId()); }
-	public Location getRespawnPoint(Player p) {
-		return respawnPoints.getWaveRespawn(p);
-	}
 
-
+	// ===== 자연 발동 진입점 =====
+	/** 밤 시작 시 10% 확률로 '준비 단계(60초)' 진입 */
 	public void tryStartWaveNight(Collection<? extends Player> onlinePlayers) {
-		if (isWaveActive) return;
+		if (isWaveActive || isPreparing) return;
 		if (onlinePlayers == null || onlinePlayers.isEmpty()) return;
-		if (random.nextInt(100) != 0) return; // 1%
+
+		// 10% 확률
+		if (random.nextInt(10) != 0) return;
 
 		List<Player> online = new ArrayList<>(onlinePlayers);
 		Player center = online.get(random.nextInt(online.size()));
-		startWave(center);
+
+		beginPreparation(center, 60); // 준비 60초
 	}
 
-	public void startWave(Player center) {
-		if (center == null) return;
-		if (isWaveActive) {
-			center.sendMessage(Component.text("이미 웨이브가 진행 중입니다.", NamedTextColor.YELLOW));
-			return;
-		}
+	// ===== 준비 단계 =====
+	private void beginPreparation(Player center, int seconds) {
+		if (center == null || isWaveActive || isPreparing) return;
 
-		isWaveActive = true;
-		currentRound = 0;
-		waveCenter = center.getLocation().clone();
-
-		participants = Bukkit.getOnlinePlayers().stream()
+		// 50블록 내 확정 참가자 스냅샷
+		List<Player> snap = Bukkit.getOnlinePlayers().stream()
 			.filter(p -> p.getWorld().equals(center.getWorld())
 				&& p.getLocation().distance(center.getLocation()) <= 50)
 			.collect(Collectors.toList());
 
-		if (participants.isEmpty()) {
-			isWaveActive = false;
-			waveCenter = null;
-			center.sendMessage(Component.text("반경 50블록 내 참여자가 없습니다.", NamedTextColor.RED));
+		if (snap.isEmpty()) {
+			center.sendMessage(Component.text("[Wave] 준비 실패: 반경 50블록 내 참가자가 없습니다.", NamedTextColor.YELLOW));
 			return;
 		}
 
+		isPreparing = true;
+		prepareRemainSec = Math.max(5, seconds);
+		prepareCenter = center.getLocation().clone();
+		prepareParticipants = new ArrayList<>(snap);
+
+		// 안내
+		broadcastTo(prepareParticipants,
+			Component.text("[Wave] 몬스터 웨이브의 징조가 느껴집니다...", NamedTextColor.GOLD));
+		broadcastTo(prepareParticipants,
+			Component.text("1분 뒤 웨이브가 시작됩니다! (반경 50블록 내 현재 인원만 참가)", NamedTextColor.GRAY));
+
+		// 1초마다 카운트다운
+		prepareTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+			// 취소 조건: 참가자 전원 이탈, 준비자 전원 오프라인/다른 월드, 또는 관리자 취소
+			prepareParticipants.removeIf(p -> !p.isOnline() || !p.getWorld().equals(prepareCenter.getWorld()));
+			if (prepareParticipants.isEmpty()) {
+				cancelPreparation(Component.text("[Wave] 준비가 취소되었습니다: 참가자가 없습니다.", NamedTextColor.YELLOW));
+				return;
+			}
+
+			// 남은 시간 안내 (액션바 + 간헐적 사운드)
+			for (Player p : prepareParticipants) {
+				p.sendActionBar(Component.text("웨이브 준비 중... " + prepareRemainSec + "초", NamedTextColor.YELLOW));
+				if (prepareRemainSec <= 5) {
+					p.playSound(p, Sound.BLOCK_NOTE_BLOCK_HAT, 0.7f, 1.8f);
+				} else if (prepareRemainSec % 10 == 0) {
+					p.playSound(p, Sound.BLOCK_NOTE_BLOCK_BELL, 0.6f, 1.2f);
+				}
+			}
+
+			if (--prepareRemainSec <= 0) {
+				// 준비 완료 → 실제 시작
+				endPreparationAndStart();
+			}
+		}, 20L, 20L);
+	}
+
+	private void cancelPreparation(Component reason) {
+		if (!isPreparing) return;
+		if (prepareTask != null) {
+			prepareTask.cancel();
+			prepareTask = null;
+		}
+		broadcastTo(prepareParticipants, reason);
+		isPreparing = false;
+		prepareParticipants.clear();
+		prepareCenter = null;
+		prepareRemainSec = 0;
+	}
+
+	private void endPreparationAndStart() {
+		if (prepareTask != null) {
+			prepareTask.cancel();
+			prepareTask = null;
+		}
+		// 준비 단계 정보로 실제 시작
+		List<Player> locked = new ArrayList<>(prepareParticipants);
+		Location center = prepareCenter == null ? locked.get(0).getLocation() : prepareCenter.clone();
+
+		// 준비 상태 초기화
+		isPreparing = false;
+		prepareParticipants.clear();
+		prepareCenter = null;
+		prepareRemainSec = 0;
+
+		startWaveWithLockedParticipants(center, locked);
+	}
+
+	// ===== 명령어 즉시 시작 =====
+	/** 테스트/명령어: 즉시 시작(준비 단계 없음) */
+	public void startWave(Player center) {
+		if (isWaveActive || isPreparing) {
+			if (center != null) center.sendMessage(Component.text("이미 웨이브가 진행(또는 준비) 중입니다.", NamedTextColor.YELLOW));
+			return;
+		}
+		// 즉시 시작용: 50블록 스냅샷을 곧바로 참가자 리스트로
+		List<Player> snap = Bukkit.getOnlinePlayers().stream()
+			.filter(p -> p.getWorld().equals(center.getWorld())
+				&& p.getLocation().distance(center.getLocation()) <= 50)
+			.collect(Collectors.toList());
+
+		if (snap.isEmpty()) {
+			if (center != null) center.sendMessage(Component.text("반경 50블록 내 참가자가 없습니다.", NamedTextColor.RED));
+			return;
+		}
+		startWaveWithLockedParticipants(center.getLocation().clone(), snap);
+	}
+
+	private void startWaveWithLockedParticipants(Location center, List<Player> lockedParticipants) {
+		isWaveActive = true;
+		currentRound = 0;
+		waveCenter = center;
+
+		participants = new ArrayList<>(lockedParticipants);
 		deathCounts.clear();
 		ghosts.clear();
 		aliveMobIds.clear();
 
 		for (Player p : participants) {
 			deathCounts.put(p.getUniqueId(), 10);
-
-			// 각 플레이어의 "현재 위치"를 웨이브 리스폰으로 지정
-			respawnPoints.rememberWaveRespawn(p, waveCenter);
 		}
 
-		// 사이드바 표시 (초기값 세팅)
+		// 사이드바 표시
 		deathSidebar.start(participants, deathCounts);
 
 		Component startMsg = Component.text("[Wave] 몬스터 웨이브가 시작됩니다!", NamedTextColor.GOLD);
-		participants.forEach(p -> p.sendMessage(startMsg));
+		broadcastTo(participants, startMsg);
 
 		startNextRound();
 	}
@@ -135,17 +226,17 @@ public class WaveManager {
 
 		aliveMobIds.clear();
 
-		int count = getMobsPerRound(currentRound);
+		int count = getMobsPerRound(currentRound); // 필요시 난이도 곡선
 		List<LivingEntity> mobs = WaveSpawner.spawnMonsters(waveCenter, currentRound, participants, count);
-		for (LivingEntity m : mobs) {
-			aliveMobIds.add(m.getUniqueId());
-		}
+		for (LivingEntity m : mobs) aliveMobIds.add(m.getUniqueId());
 
-		// 필요 시: 라운드 시작할 때 전체 사이드바 값을 다시 재확인/갱신
 		deathSidebar.updateAll(deathCounts);
 	}
 
-	// onPlayerDeath 내부 변경
+	private int getMobsPerRound(int round) {
+		return 1; // 현재는 1마리; 이후 라운드별 증가 로직로 교체 가능
+	}
+
 	public void onPlayerDeath(Player player) {
 		if (!isWaveActive || player == null) return;
 		UUID id = player.getUniqueId();
@@ -157,25 +248,23 @@ public class WaveManager {
 		if (left <= 0) {
 			ghosts.add(id);
 			player.sendMessage(Component.text("당신은 유령 상태가 되었습니다. 웨이브 종료까지 관전만 가능합니다.", NamedTextColor.GRAY));
-
-			// 리스폰 직후 관전 모드 적용 (리스너에서도 안전망이 있으나 즉시 처리 보조)
 			plugin.getServer().getScheduler().runTask(plugin, () -> ghostManager.setGhost(player));
+		} else {
+			player.sendMessage(Component.text("남은 데스카운트: " + left, NamedTextColor.GRAY));
 		}
 
 		deathSidebar.update(player, Math.max(left, 0));
 
-		// 전원 유령이면 실패
 		if (ghosts.size() == participants.size()) {
 			Bukkit.getScheduler().runTask(plugin, () -> finishWave(false));
 		}
 	}
 
-	/** 웨이브 몹이 죽을 때마다 호출됨 (WaveMobDropListener에서) */
+	/** 웨이브 몹 사망 보고 (WaveMobDropListener에서 호출) */
 	public void onWaveMobKilled(UUID mobId) {
 		if (!isWaveActive) return;
 		if (!aliveMobIds.remove(mobId)) return;
 
-		// 아직 몹 남아있으면 액션바로 남은 수 안내(선택)
 		if (!aliveMobIds.isEmpty()) {
 			int leftMobs = aliveMobIds.size();
 			for (Player p : participants) {
@@ -184,12 +273,9 @@ public class WaveManager {
 			return;
 		}
 
-		// 이 라운드 몬스터 전부 처치 → 다음 라운드
 		if (currentRound >= 10) {
-			// 몹 전멸로 웨이브 클리어 → 다음 틱에 마무리
 			Bukkit.getScheduler().runTask(plugin, () -> finishWave(true));
 		} else {
-			// 다음 라운드 시작도 다음 틱에
 			Bukkit.getScheduler().runTaskLater(plugin, this::startNextRound, 20L * 2);
 		}
 	}
@@ -208,25 +294,23 @@ public class WaveManager {
 		}
 	}
 
-	// finishWave 내부 변경 (유령 복원 먼저)
 	public void finishWave(boolean success) {
+		// 준비 중이라면 '웨이브'가 아니라 '준비' 취소로 처리
+		if (isPreparing && !isWaveActive) {
+			cancelPreparation(Component.text("[Wave] 준비가 취소되었습니다.", NamedTextColor.YELLOW));
+			return;
+		}
+
 		if (!isWaveActive) return;
 		isWaveActive = false;
 
 		if (success) celebrateSuccess();
 
-		// 유령 복원: 먼저 게임모드부터 돌려놓자 (관전→원래 모드)
-		for (Player p : participants) {
-			ghostManager.restore(p);
-		}
-
-		// 사이드바 해제 등 UI 정리
+		// 관전 → 원래 모드 복구
+		for (Player p : participants) ghostManager.restore(p);
+		// 사이드바 해제
 		deathSidebar.stop();
 
-		// 원래 리스폰으로 복원
-		respawnPoints.clearAll();
-
-		// 상태 복원 & 보상/메시지
 		for (Player p : participants) {
 			if (success) {
 				RewardManager.giveReward(p);
@@ -236,7 +320,6 @@ public class WaveManager {
 			}
 		}
 
-		// 캐시 정리
 		ghostManager.clearAll();
 		participants.clear();
 		deathCounts.clear();
@@ -246,16 +329,31 @@ public class WaveManager {
 		currentRound = 0;
 	}
 
-	public void skipWave() { finishWave(true); }
-	public void stopWave() { finishWave(false); }
-
-
-	public Integer getDeathLeft(Player p) {
-		return deathCounts.get(p.getUniqueId());
+	// 명령어: 강제 성공/중지
+	public void skipWave() {
+		if (isPreparing && !isWaveActive) {
+			cancelPreparation(Component.text("[Wave] 준비가 관리자로 인해 취소되었습니다.", NamedTextColor.YELLOW));
+			return;
+		}
+		finishWave(true);
 	}
+
+	public void stopWave() {
+		if (isPreparing && !isWaveActive) {
+			cancelPreparation(Component.text("[Wave] 준비가 관리자로 인해 취소되었습니다.", NamedTextColor.YELLOW));
+			return;
+		}
+		finishWave(false);
+	}
+
+	public Integer getDeathLeft(Player p) { return deathCounts.get(p.getUniqueId()); }
 
 	public boolean isParticipant(Player player) {
 		if (player == null) return false;
 		return participants.stream().anyMatch(p -> p.getUniqueId().equals(player.getUniqueId()));
+	}
+
+	private void broadcastTo(Collection<Player> list, Component msg) {
+		for (Player p : list) p.sendMessage(msg);
 	}
 }
