@@ -10,6 +10,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -310,6 +311,8 @@ public class WaveManager {
 		if (!isWaveActive) return;
 		isWaveActive = false;
 
+		despawnAllWaveMobs();
+
 		if (success) celebrateSuccess();
 
 		// 관전 → 원래 모드 복구
@@ -364,4 +367,17 @@ public class WaveManager {
 	private void broadcastTo(Collection<Player> list, Component msg) {
 		for (Player p : list) p.sendMessage(msg);
 	}
+
+	// WaveManager 내부 어딘가에 추가
+	private void despawnAllWaveMobs() {
+		// 복사본으로 돌면서 안전하게 제거
+		for (UUID id : new HashSet<>(aliveMobIds)) {
+			Entity e = Bukkit.getEntity(id);
+			if (e != null && e.isValid()) {
+				e.remove(); // 드롭 안 남기고 바로 제거
+			}
+		}
+		aliveMobIds.clear();
+	}
+
 }
