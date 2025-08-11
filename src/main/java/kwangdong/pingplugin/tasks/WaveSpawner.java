@@ -130,8 +130,6 @@ public class WaveSpawner {
 	}
 
 
-	// ----- 내부 유틸 -----
-
 	/** 라운드→가중치에서 티어 선택 → 해당 티어 풀에서 엔티티 타입 선택(불가시 점진적 폴백) */
 	private static EntityType pickEntityTypeForRound(World world, int round, ThreadLocalRandom rnd) {
 		Map<Tier, Integer> weights = weightsForRound(round);
@@ -192,16 +190,22 @@ public class WaveSpawner {
 
 	/** 웨이브 태그 부여 */
 	private static void tagWaveMob(LivingEntity e) {
-		// 프로젝트에서 사용 중인 공용 키에 맞춤
-		NamespacedKey key = WaveTags.WAVE_MOB;
-		e.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+		e.getPersistentDataContainer().set(WaveTags.WAVE_MOB, PersistentDataType.BYTE, (byte) 1);
 
-		// 드롭 방지용으로 메인핸드/오프핸드 비움(일부 몹 기본장비 드랍 대비)
 		if (e instanceof Mob mob) {
-			try {
-				mob.getEquipment().setItem(EquipmentSlot.HAND, null);
-				mob.getEquipment().setItem(EquipmentSlot.OFF_HAND, null);
-			} catch (Throwable ignored) {}
+			mob.setCanPickupItems(false); // 전리품 줍기 방지(있으면)
+
+			var eq = mob.getEquipment();
+			if (eq != null) {
+				try {
+					eq.setItemInMainHandDropChance(0f);
+					eq.setItemInOffHandDropChance(0f);
+					eq.setHelmetDropChance(0f);
+					eq.setChestplateDropChance(0f);
+					eq.setLeggingsDropChance(0f);
+					eq.setBootsDropChance(0f);
+				} catch (Throwable ignored) {}
+			}
 		}
 	}
 

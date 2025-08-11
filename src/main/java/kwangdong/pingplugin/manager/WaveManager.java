@@ -157,7 +157,7 @@ public class WaveManager {
 		}
 		// 준비 단계 정보로 실제 시작
 		List<Player> locked = new ArrayList<>(prepareParticipants);
-		Location center = prepareCenter == null ? locked.get(0).getLocation() : prepareCenter.clone();
+		Location center = prepareCenter == null ? locked.getFirst().getLocation() : prepareCenter.clone();
 
 		// 준비 상태 초기화
 		isPreparing = false;
@@ -216,7 +216,7 @@ public class WaveManager {
 		Component title = Component.text("Round " + currentRound + " / 10", NamedTextColor.GOLD);
 		Component sub = Component.text("일반 라운드", NamedTextColor.GRAY);
 		if(ELITE_ROUNDS.contains(currentRound))
-			sub = Component.text("엘리트 확률 10%", NamedTextColor.DARK_RED);
+			sub = Component.text("엘리트 라운드", NamedTextColor.DARK_RED);
 
 		Title t = Title.title(title, sub,
 			Times.times(Duration.ofMillis(200), Duration.ofMillis(1200), Duration.ofMillis(200)));
