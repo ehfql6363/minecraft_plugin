@@ -77,7 +77,7 @@ public class WaveManager {
 		if (onlinePlayers == null || onlinePlayers.isEmpty()) return;
 
 		// 10% 확률
-		if (random.nextInt(10) != 0) return;
+		if (random.nextInt(6) != 0) return;
 
 		List<Player> online = new ArrayList<>(onlinePlayers);
 		Player center = online.get(random.nextInt(online.size()));
@@ -214,9 +214,13 @@ public class WaveManager {
 
 	private void announceRound() {
 		Component title = Component.text("Round " + currentRound + " / 10", NamedTextColor.GOLD);
-		Component sub   = Component.text("엘리트 확률 10%", NamedTextColor.GRAY);
+		Component sub = Component.text("일반 라운드", NamedTextColor.GRAY);
+		if(ELITE_ROUNDS.contains(currentRound))
+			sub = Component.text("엘리트 확률 10%", NamedTextColor.DARK_RED);
+
 		Title t = Title.title(title, sub,
 			Times.times(Duration.ofMillis(200), Duration.ofMillis(1200), Duration.ofMillis(200)));
+
 		for (Player p : participants) {
 			p.showTitle(t);
 			p.sendActionBar(Component.text("라운드 시작!", NamedTextColor.YELLOW));
