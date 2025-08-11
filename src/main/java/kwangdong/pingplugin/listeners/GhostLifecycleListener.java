@@ -36,13 +36,14 @@ public class GhostLifecycleListener implements Listener {
 		Location waveLoc = waveManager.getRespawnPoint(p);
 		if (waveLoc == null) return;
 
-		// 안전한 Y로 보정 (지형 막힘 방지)
+		// 안전 Y 보정 (막힘 방지)
 		Location safe = waveLoc.clone();
 		int y = Math.max(safe.getBlockY(), safe.getWorld().getHighestBlockYAt(safe)) + 1;
 		safe.setY(y);
 
 		e.setRespawnLocation(safe);
 	}
+
 
 
 
