@@ -12,72 +12,112 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
+import java.util.Random;
 
 public class RewardManager {
 
-    private static NamespacedKey SCROLL_KEY;
-    private static NamespacedKey SCROLL_UID_KEY; // 스택 방지용 개별 식별자
-    private static final String SCROLL_NAME = "강화 스크롤";
-    private static final int ADDITIONAL_EXP = 12000;
+	// ===== 설정 =====
+	private static final int DRAGON_EXP = 12000;
+	private static final Random RNG = new Random();
 
-    public static void init(Plugin plugin) {
-        SCROLL_KEY = new NamespacedKey(plugin, "upgrade_scroll");
-        SCROLL_UID_KEY = new NamespacedKey(plugin, "upgrade_scroll_uid");
-    }
+	// 확률(가중치) - config.yml에서 읽어옴
+	private static int UPGRADE_WEIGHT = 70; // 기본 70
+	private static int REPAIR_WEIGHT  = 30; // 기본 30
 
-    public static NamespacedKey getScrollKey() {
-        return SCROLL_KEY;
-    }
+	// ===== 스크롤 태그 =====
+	private static NamespacedKey UPGRADE_SCROLL_KEY;
+	private static NamespacedKey REPAIR_SCROLL_KEY;
 
-    public static void giveReward(Player player) {
-        // 엔더드래곤급 경험치
-        player.giveExp(ADDITIONAL_EXP);
+	// 표시 이름
+	private static final String NAME_UPGRADE = "강화 스크롤";
+	private static final String NAME_REPAIR  = "내구도 회복 스크롤";
 
-        // 스크롤 지급 (인벤 꽉 차면 바닥으로 드롭)
-        ItemStack scroll = makeScroll();
-        Map<Integer, ItemStack> leftover = player.getInventory().addItem(scroll);
-        if (!leftover.isEmpty()) {
-            player.getWorld().dropItem(player.getLocation(), scroll);
-        }
+	public static void init(Plugin plugin) {
+		UPGRADE_SCROLL_KEY = new NamespacedKey(plugin, "upgrade_scroll");
+		REPAIR_SCROLL_KEY  = new NamespacedKey(plugin, "repair_scroll");
 
-        player.sendMessage(Component.text(SCROLL_NAME + "을(를) 획득했습니다! 왼손 아이템에 사용하세요.", NamedTextColor.GREEN));
-    }
+		// config 가중치 로드 (없으면 기본값)
+		// 예: rewards.upgrade_scroll_weight: 70 / rewards.repair_scroll_weight: 30
+		if (plugin.getConfig() != null) {
+			UPGRADE_WEIGHT = plugin.getConfig().getInt("rewards.upgrade_scroll_weight", UPGRADE_WEIGHT);
+			REPAIR_WEIGHT  = plugin.getConfig().getInt("rewards.repair_scroll_weight",  REPAIR_WEIGHT);
+		}
+	}
 
-    public static ItemStack makeScroll() {
-        Objects.requireNonNull(SCROLL_KEY, "RewardManager.init(plugin) 먼저 호출해야 합니다.");
+	/** 웨이브 클리어 보상 지급 */
+	public static void giveReward(Player player) {
+		// 1) 경험치는 항상 지급
+		player.giveExp(DRAGON_EXP);
 
-        ItemStack item = new ItemStack(Material.PAPER);
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return item; // 방어적 처리
+		// 2) 스크롤 1종 랜덤 지급(가중치)
+		ItemStack scroll = rollOneScroll();
+		player.getInventory().addItem(scroll);
 
-        // 이름/로어
-        meta.displayName(Component.text(SCROLL_NAME, NamedTextColor.AQUA));
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text("왼손 아이템의 인첸트를 +1 강화합니다."));
-        lore.add(Component.text("인첸트 제한 무시!"));
-        meta.lore(lore);
+		if (isUpgradeScroll(scroll)) {
+			player.sendMessage(Component.text("[보상] 강화 스크롤을 획득했습니다! 왼손 아이템에 사용하세요.", NamedTextColor.GREEN));
+		} else {
+			player.sendMessage(Component.text("[보상] 내구도 회복 스크롤을 획득했습니다! 왼손 아이템에 사용하세요.", NamedTextColor.GREEN));
+		}
+	}
 
-        // 스크롤 식별 태그
-        meta.getPersistentDataContainer().set(SCROLL_KEY, PersistentDataType.BYTE, (byte) 1);
+	// ===== 확률 롤 =====
+	private static ItemStack rollOneScroll() {
+		int sum = Math.max(0, UPGRADE_WEIGHT) + Math.max(0, REPAIR_WEIGHT);
+		if (sum <= 0) {
+			// 가중치가 0/0 등 비정상인 경우 안전하게 강화 스크롤
+			return makeUpgradeScroll();
+		}
+		int r = RNG.nextInt(sum);
+		return (r < UPGRADE_WEIGHT) ? makeUpgradeScroll() : makeRepairScroll();
+	}
 
-        // 스택 방지: 개별 UID 부여 (같은 스크롤도 서로 다른 아이템으로 취급)
-        if (SCROLL_UID_KEY != null) {
-            meta.getPersistentDataContainer().set(SCROLL_UID_KEY, PersistentDataType.STRING, UUID.randomUUID().toString());
-        }
+	// ===== 스크롤 제작 & 판별 =====
+	public static ItemStack makeUpgradeScroll() {
+		ItemStack item = new ItemStack(Material.PAPER);
+		ItemMeta meta = item.getItemMeta();
+		if (meta == null) return item;
 
-        item.setItemMeta(meta);
-        return item;
-    }
+		meta.displayName(Component.text(NAME_UPGRADE, NamedTextColor.AQUA));
+		List<Component> lore = new ArrayList<>();
+		lore.add(Component.text("왼손 아이템의 인첸트를 +1 강화합니다.", NamedTextColor.WHITE));
+		lore.add(Component.text("인첸트 제한 무시!", NamedTextColor.GRAY));
+		meta.lore(lore);
 
-    public static boolean isUpgradeScroll(ItemStack stack) {
-        if (stack == null || stack.getType() == Material.AIR) return false;
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null) return false;
+		meta.getPersistentDataContainer().set(Objects.requireNonNull(UPGRADE_SCROLL_KEY), PersistentDataType.BYTE, (byte)1);
+		item.setItemMeta(meta);
+		return item;
+	}
 
-        Byte tag = meta.getPersistentDataContainer().get(SCROLL_KEY, PersistentDataType.BYTE);
-        return tag != null && tag == (byte) 1;
-    }
+	public static ItemStack makeRepairScroll() {
+		ItemStack item = new ItemStack(Material.PAPER);
+		ItemMeta meta = item.getItemMeta();
+		if (meta == null) return item;
+
+		meta.displayName(Component.text(NAME_REPAIR, NamedTextColor.AQUA));
+		List<Component> lore = new ArrayList<>();
+		lore.add(Component.text("왼손 아이템의 내구도를 최대치로 회복합니다.", NamedTextColor.WHITE));
+		lore.add(Component.text("내구도 있는 장비에만 사용 가능", NamedTextColor.GRAY));
+		meta.lore(lore);
+
+		meta.getPersistentDataContainer().set(Objects.requireNonNull(REPAIR_SCROLL_KEY), PersistentDataType.BYTE, (byte)1);
+		item.setItemMeta(meta);
+		return item;
+	}
+
+	public static boolean isUpgradeScroll(ItemStack stack) {
+		if (stack == null || stack.getType() == Material.AIR) return false;
+		ItemMeta meta = stack.getItemMeta();
+		if (meta == null) return false;
+		Byte tag = meta.getPersistentDataContainer().get(UPGRADE_SCROLL_KEY, PersistentDataType.BYTE);
+		return tag != null && tag == (byte)1;
+	}
+
+	public static boolean isRepairScroll(ItemStack stack) {
+		if (stack == null || stack.getType() == Material.AIR) return false;
+		ItemMeta meta = stack.getItemMeta();
+		if (meta == null) return false;
+		Byte tag = meta.getPersistentDataContainer().get(REPAIR_SCROLL_KEY, PersistentDataType.BYTE);
+		return tag != null && tag == (byte)1;
+	}
 }
