@@ -45,6 +45,7 @@ public class WaveManager {
 	private int prepareRemainSec;
 	private Location prepareCenter;
 	private List<Player> prepareParticipants = new ArrayList<>();
+	private final RespawnPointManager respawnPoints = new RespawnPointManager();
 
 	private Location waveCenter;
 
@@ -60,6 +61,10 @@ public class WaveManager {
 	public int getCurrentRound() { return currentRound; }
 	public Plugin getPlugin() { return plugin; }
 	public boolean isGhost(Player p) { return ghosts.contains(p.getUniqueId()); }
+
+	public Location getRespawnPoint(Player p) {
+		return respawnPoints.getWaveRespawn(p);
+	}
 
 	// ===== 자연 발동 진입점 =====
 	/** 밤 시작 시 10% 확률로 '준비 단계(60초)' 진입 */
@@ -191,6 +196,7 @@ public class WaveManager {
 
 		for (Player p : participants) {
 			deathCounts.put(p.getUniqueId(), 10);
+			respawnPoints.rememberWaveRespawn(p, waveCenter);
 		}
 
 		// 사이드바 표시
@@ -310,6 +316,8 @@ public class WaveManager {
 		for (Player p : participants) ghostManager.restore(p);
 		// 사이드바 해제
 		deathSidebar.stop();
+
+		respawnPoints.clearAll();
 
 		for (Player p : participants) {
 			if (success) {
