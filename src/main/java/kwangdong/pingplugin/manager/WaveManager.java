@@ -53,6 +53,9 @@ public class WaveManager {
 	// UI
 	private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
 
+	private static final Set<Integer> ELITE_ROUNDS = Set.of(3, 6, 10);
+
+
 	public WaveManager(Plugin plugin) {
 		this.plugin = plugin;
 	}
@@ -240,9 +243,18 @@ public class WaveManager {
 		deathSidebar.updateAll(deathCounts);
 	}
 
+	// WaveManager 기존 getMobsPerRound(...) 교체
 	private int getMobsPerRound(int round) {
-		return 1; // 현재는 1마리; 이후 라운드별 증가 로직로 교체 가능
+		// 3/6/10 라운드는 무조건 1마리
+		if (ELITE_ROUNDS.contains(round)) return 1;
+
+		// 그 외 라운드는 '비-단독 라운드' 개수만큼 선형 증가
+		// 예: 1→1, 2→2, 3→1(특례), 4→3, 5→4, 6→1(특례), 7→5, 8→6, 9→7, 10→1(특례)
+		long soloCountSoFar = ELITE_ROUNDS.stream().filter(r -> r <= round).count();
+		int nonSoloSoFar = round - (int) soloCountSoFar;
+		return Math.max(1, nonSoloSoFar);
 	}
+
 
 	public void onPlayerDeath(Player player) {
 		if (!isWaveActive || player == null) return;
