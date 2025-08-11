@@ -42,7 +42,6 @@ public class PingPlugin extends JavaPlugin {
 
         // 리스너
         getServer().getPluginManager().registerEvents(new DeathListener(this, waveManager), this);
-        getServer().getPluginManager().registerEvents(new WaveListener(waveManager), this);
         getServer().getPluginManager().registerEvents(new ScrollUseListener(), this);
         getServer().getPluginManager().registerEvents(new WaveSleepListener(waveManager), this);
         getServer().getPluginManager().registerEvents(new WaveMobDropListener(waveManager), this);
