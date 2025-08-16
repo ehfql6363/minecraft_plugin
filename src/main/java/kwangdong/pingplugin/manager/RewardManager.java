@@ -17,49 +17,51 @@ import java.util.Random;
 
 public class RewardManager {
 
-	// ===== 설정 =====
-	private static final int DRAGON_EXP = 12000;
-	private static final Random RNG = new Random();
+    private static final int DRAGON_EXP = 12000;
+    private static final Random RNG = new Random();
 
-	// 확률(가중치) - config.yml에서 읽어옴
-	private static int UPGRADE_WEIGHT = 70; // 기본 70
-	private static int REPAIR_WEIGHT  = 30; // 기본 30
+    private static int UPGRADE_WEIGHT = 70;
+    private static int REPAIR_WEIGHT  = 30;
 
-	// ===== 스크롤 태그 =====
-	private static NamespacedKey UPGRADE_SCROLL_KEY;
-	private static NamespacedKey REPAIR_SCROLL_KEY;
+    private static NamespacedKey UPGRADE_SCROLL_KEY;
+    private static NamespacedKey REPAIR_SCROLL_KEY;
 
-	// 표시 이름
-	private static final String NAME_UPGRADE = "강화 스크롤";
-	private static final String NAME_REPAIR  = "내구도 회복 스크롤";
+    private static final String NAME_UPGRADE = "강화 스크롤";
+    private static final String NAME_REPAIR  = "내구도 회복 스크롤";
 
-	public static void init(Plugin plugin) {
-		UPGRADE_SCROLL_KEY = new NamespacedKey(plugin, "upgrade_scroll");
-		REPAIR_SCROLL_KEY  = new NamespacedKey(plugin, "repair_scroll");
+    private static Plugin pluginRef; // 로그용
 
-		// config 가중치 로드 (없으면 기본값)
-		// 예: rewards.upgrade_scroll_weight: 70 / rewards.repair_scroll_weight: 30
-		if (plugin.getConfig() != null) {
-			UPGRADE_WEIGHT = plugin.getConfig().getInt("rewards.upgrade_scroll_weight", UPGRADE_WEIGHT);
-			REPAIR_WEIGHT  = plugin.getConfig().getInt("rewards.repair_scroll_weight",  REPAIR_WEIGHT);
-		}
-	}
+    public static void init(Plugin plugin) {
+        pluginRef = plugin;
+        UPGRADE_SCROLL_KEY = new NamespacedKey(plugin, "upgrade_scroll");
+        REPAIR_SCROLL_KEY  = new NamespacedKey(plugin, "repair_scroll");
 
-	/** 웨이브 클리어 보상 지급 */
-	public static void giveReward(Player player) {
-		// 1) 경험치는 항상 지급
-		player.giveExp(DRAGON_EXP);
+        plugin.getConfig();
+        UPGRADE_WEIGHT = plugin.getConfig().getInt("rewards.upgrade_scroll_weight", UPGRADE_WEIGHT);
+        REPAIR_WEIGHT  = plugin.getConfig().getInt("rewards.repair_scroll_weight",  REPAIR_WEIGHT);
+    }
 
-		// 2) 스크롤 1종 랜덤 지급(가중치)
-		ItemStack scroll = rollOneScroll();
-		player.getInventory().addItem(scroll);
+    /** 웨이브 클리어 보상 지급 */
+    public static void giveReward(Player player) {
+        player.giveExp(DRAGON_EXP);
 
-		if (isUpgradeScroll(scroll)) {
-			player.sendMessage(Component.text("[보상] 강화 스크롤을 획득했습니다! 왼손 아이템에 사용하세요.", NamedTextColor.GREEN));
-		} else {
-			player.sendMessage(Component.text("[보상] 내구도 회복 스크롤을 획득했습니다! 왼손 아이템에 사용하세요.", NamedTextColor.GREEN));
-		}
-	}
+        ItemStack scroll = rollOneScroll();
+        player.getInventory().addItem(scroll);
+
+        boolean isUp = isUpgradeScroll(scroll);
+        player.sendMessage(Component.text(
+                isUp ? "[보상] 강화 스크롤을 획득했습니다! 왼손 아이템에 사용하세요."
+                        : "[보상] 내구도 회복 스크롤을 획득했습니다! 왼손 아이템에 사용하세요.",
+                NamedTextColor.GREEN
+        ));
+
+        if (pluginRef != null) {
+            pluginRef.getLogger().info(String.format(
+                    "[Wave] Reward given to %s: EXP=%d, scroll=%s",
+                    player.getName(), DRAGON_EXP, (isUp ? "UPGRADE" : "REPAIR")
+            ));
+        }
+    }
 
 	// ===== 확률 롤 =====
 	private static ItemStack rollOneScroll() {
