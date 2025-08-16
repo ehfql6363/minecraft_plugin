@@ -1,5 +1,5 @@
 name: PingPlugin
-version: 1.3.21
+version: 1.3.22
 main: kwangdong.pingplugin.PingPlugin
 api-version: 1.21.8
 commands:
@@ -13,5 +13,5 @@ commands:
     aliases: [d]
   wave:
     description: 웨이브 이벤트 처리
-    usage: /wave <start|skip|stop>
+    usage: /wave <start|skip|stop|mobs>
     aliases: [we]
