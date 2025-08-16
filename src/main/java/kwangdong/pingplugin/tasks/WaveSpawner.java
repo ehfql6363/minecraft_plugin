@@ -82,7 +82,7 @@ public class WaveSpawner {
 
 		List<Player> validTargets = participants == null
 			? List.of()
-			: participants.stream().filter(Objects::nonNull).collect(Collectors.toList());
+			: participants.stream().filter(Objects::nonNull).toList();
 
 		List<LivingEntity> out = new ArrayList<>();
 
@@ -115,6 +115,7 @@ public class WaveSpawner {
 					}
 					entity.setCustomNameVisible(true);
 					entity.setGlowing(true);
+                    entity.setRemoveWhenFarAway(false);
 
 					if (!validTargets.isEmpty() && entity instanceof Monster monster) {
 						Player target = validTargets.get(rnd.nextInt(validTargets.size()));
