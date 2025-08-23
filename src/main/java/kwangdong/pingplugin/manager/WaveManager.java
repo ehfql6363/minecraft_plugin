@@ -14,6 +14,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -45,6 +46,10 @@ public class WaveManager {
     private final RespawnPointManager respawnPoints = new RespawnPointManager();
 
     private Location waveCenter;
+
+    // 상단에 상수 권장
+    private static final int PREPARE_RADIUS = 200;
+    private static final int START_LOCK_RADIUS = 200;
 
     // UI
     private final DeathSidebarManager deathSidebar = new DeathSidebarManager();
@@ -100,29 +105,31 @@ public class WaveManager {
     private void beginPreparation(Player center, int seconds) {
 	    if (center == null || isWaveActive || isPreparing) return;
 
-	    // 반경 50블록 스냅샷
+	    // 반경 200블록 스냅샷
 	    List<Player> snap = Bukkit.getOnlinePlayers().stream()
 		    .filter(p -> p.getWorld().equals(center.getWorld())
-			    && p.getLocation().distance(center.getLocation()) <= 50)
+			    && p.getLocation().distance(center.getLocation()) <= PREPARE_RADIUS)
 		    .collect(Collectors.toList());
 	    if (snap.isEmpty()) {
-		    center.sendMessage(Component.text("[Wave] 준비 실패: 반경 50블록 내 참가자가 없습니다.", NamedTextColor.YELLOW));
+		    center.sendMessage(Component.text("[Wave] 준비 실패: 반경 200블록 내 참가자가 없습니다.", NamedTextColor.YELLOW));
 		    plugin.getLogger().info("[Wave] Preparation aborted: no participants in 50 blocks.");
 		    return;
 	    }
 
-	    // ✅ seconds <= 0 이면 즉시 시작 모드: 그 순간 위치/참가자로 고정
-	    if (seconds <= 0) {
-		    Location fixed = center.getLocation().clone();
-		    plugin.getLogger().info("[Wave] Preparation skipped (0s). Lock center immediately.");
-		    // 안내 + 강조
-		    prepareParticipants = new ArrayList<>(snap);
-		    isPreparing = false; // 즉시 시작이므로 preparing 상태로 두지 않음
-		    participants.clear();
-		    highlightCenter(center, "instant"); // 액션바/글로우/파티클
-		    startWaveWithLockedParticipants(fixed, snap);
-		    return;
-	    }
+        if (seconds <= 0) {
+            Location fixed = center.getLocation().clone();
+            plugin.getLogger().info("[Wave] Preparation skipped (0s). Lock center immediately.");
+
+            // ✅ 즉시 시작에서도 브로드캐스트가 보이도록 잠깐 준비 상태로 둔다
+            this.prepareParticipants = new ArrayList<>(snap);
+            this.isPreparing = true;
+            highlightCenter(center, "instant"); // 액션바/글로우/파티클 표시
+            this.isPreparing = false;
+
+            startWaveWithLockedParticipants(fixed, snap);
+            return;
+        }
+
 
         isPreparing = true;
         prepareRemainSec = Math.max(5, seconds);
@@ -179,16 +186,52 @@ public class WaveManager {
             prepareTask.cancel();
             prepareTask = null;
         }
-        List<Player> locked = new ArrayList<>(prepareParticipants);
-        Location center = prepareCenter == null ? locked.getFirst().getLocation() : prepareCenter.clone();
 
+        // 1) 앵커 현재 위치로 최종 중심 좌표 스냅샷
+        Location finalCenter;
+        Player anchor = (anchorCenterId != null) ? Bukkit.getPlayer(anchorCenterId) : null;
+        if (anchor != null && anchor.isOnline() && anchor.getWorld().getEnvironment() == org.bukkit.World.Environment.NORMAL) {
+            finalCenter = anchor.getLocation().clone();
+        } else if (prepareCenter != null) {
+            // 앵커가 없거나 월드가 바뀐 경우, 준비 당시 좌표(백업) 사용
+            finalCenter = prepareCenter.clone();
+        } else if (!prepareParticipants.isEmpty()) {
+            // 마지막 안전망: 참가자 중 첫 번째 기준
+            finalCenter = prepareParticipants.getFirst().getLocation().clone();
+        } else {
+            plugin.getLogger().warning("[Wave] Preparation ended but could not resolve finalCenter. Aborting.");
+            cancelPreparation(Component.text("[Wave] 준비 실패: 중심 좌표를 찾을 수 없습니다.", NamedTextColor.RED));
+            return;
+        }
+
+        // 2) 0초 시점(시작 직전) 반경 50블록 기준으로 '현재' 참가자 재스냅샷
+        List<Player> locked = Bukkit.getOnlinePlayers().stream()
+                .filter(p -> p.getWorld().equals(finalCenter.getWorld())
+                        && p.getLocation().distance(finalCenter) <= START_LOCK_RADIUS )
+                .collect(Collectors.toList());
+
+        if (locked.isEmpty()) {
+            cancelPreparation(Component.text("[Wave] 준비가 취소되었습니다: 시작 시점 반경 50블록 내 참가자가 없습니다.", NamedTextColor.YELLOW));
+            return;
+        }
+
+        // 3) 준비 상태 정리
         isPreparing = false;
         prepareParticipants.clear();
         prepareCenter = null;
         prepareRemainSec = 0;
 
-        startWaveWithLockedParticipants(center, locked);
+        // (선택) 앵커가 있으면 마지막으로 한 번 더 강조
+        if (anchor != null) {
+            try {
+                // highlightCenter(anchor, "start"); // 이미 표시했다면 생략 가능
+            } catch (Throwable ignored) {}
+        }
+
+        // 4) 최종 좌표 + 최종 참가자 스냅샷으로 시작
+        startWaveWithLockedParticipants(finalCenter, locked);
     }
+
 
     // ===== 명령어 즉시 시작 =====
     public void startWave(Player center) {
@@ -482,20 +525,20 @@ public class WaveManager {
 		pingCenterParticles(center.getLocation(), 20 * 2);
 	}
 
-	private void pingCenterParticles(Location loc, int durationTicks) {
-		if (loc == null || loc.getWorld() == null) return;
-		final Location base = loc.clone();
-		Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-			int ticks = 0;
-			@Override public void run() {
-				if (ticks >= durationTicks) { throw new RuntimeException("stop"); }
-				var w = base.getWorld();
-				double x = base.getX() + 0.5, z = base.getZ() + 0.5;
-				for (double y = base.getY(); y < base.getY() + 8; y += 0.5) {
-					w.spawnParticle(Particle.END_ROD, x, y, z, 1, 0.05, 0.05, 0.05, 0.01);
-				}
-				ticks += 10;
-			}
-		}, 0L, 10L);
-	}
+    private void pingCenterParticles(Location loc, int durationTicks) {
+        if (loc == null || loc.getWorld() == null) return;
+        final Location base = loc.clone();
+        new BukkitRunnable() {
+            int ticks = 0;
+            @Override public void run() {
+                if (ticks >= durationTicks) { cancel(); return; }
+                var w = base.getWorld();
+                double x = base.getX() + 0.5, z = base.getZ() + 0.5;
+                for (double y = base.getY(); y < base.getY() + 8; y += 0.5) {
+                    w.spawnParticle(Particle.END_ROD, x, y, z, 1, 0.05, 0.05, 0.05, 0.01);
+                }
+                ticks += 10;
+            }
+        }.runTaskTimer(plugin, 0L, 10L);
+    }
 }
