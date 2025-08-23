@@ -10,10 +10,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Random;
+import java.util.*;
 
 public class RewardManager {
 
@@ -46,7 +43,19 @@ public class RewardManager {
         player.giveExp(DRAGON_EXP);
 
         ItemStack scroll = rollOneScroll();
-        player.getInventory().addItem(scroll);
+
+        // ✅ addItem의 남는 아이템은 직접 처리해줘야 함 (인벤 가득할 때)
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(scroll);
+        if (!leftovers.isEmpty()) {
+            // 자연 드랍: 바닥에 떨어뜨리기
+            leftovers.values().forEach(item ->
+                    player.getWorld().dropItemNaturally(player.getLocation(), item)
+            );
+            if (pluginRef != null) {
+                pluginRef.getLogger().info(String.format(
+                        "[Wave] Inventory full: dropped reward for %s at ground.", player.getName()));
+            }
+        }
 
         boolean isUp = isUpgradeScroll(scroll);
         player.sendMessage(Component.text(
@@ -57,13 +66,15 @@ public class RewardManager {
 
         if (pluginRef != null) {
             pluginRef.getLogger().info(String.format(
-                    "[Wave] Reward given to %s: EXP=%d, scroll=%s",
-                    player.getName(), DRAGON_EXP, (isUp ? "UPGRADE" : "REPAIR")
+                    "[Wave] Reward given to %s: EXP=%d, scroll=%s (dropIfFull=%s)",
+                    player.getName(), DRAGON_EXP, (isUp ? "UPGRADE" : "REPAIR"),
+                    leftovers.isEmpty() ? "no" : "yes"
             ));
         }
     }
 
-	// ===== 확률 롤 =====
+
+    // ===== 확률 롤 =====
 	private static ItemStack rollOneScroll() {
 		int sum = Math.max(0, UPGRADE_WEIGHT) + Math.max(0, REPAIR_WEIGHT);
 		if (sum <= 0) {
